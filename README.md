@@ -19,6 +19,14 @@
 4. 验证 Pillow 与 tkinter，并运行完整单元测试；
 5. 创建桌面 `TagCleaner` 快捷方式并启动本地服务。
 
+使用 Git 克隆并安装：
+
+```powershell
+git clone https://github.com/Mon-Landis/TagCleaner.git
+cd TagCleaner
+.\install_tagcleaner.bat
+```
+
 命令行安装：
 
 ```powershell
