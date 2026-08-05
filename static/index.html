@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1b1e20" />
+    <title>TagCleaner / Anima LoRA Workbench</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark">TC</div>
+          <div>
+            <p class="brand-name">TAG CLEANER</p>
+            <p class="brand-sub">ANIMA / LORA DATA WORKBENCH</p>
+          </div>
+        </div>
+        <div class="path-readout">
+          <span class="micro-label">ACTIVE FOLDER</span>
+          <span id="loadedPath" class="path-value">未加载目录</span>
+        </div>
+        <div class="top-actions">
+          <button id="revertButton" class="hold-button revert-button" type="button" disabled title="按住直到黄色进度条走完，以清除未保存改动">
+            <span class="hold-fill" aria-hidden="true"></span>
+            <span class="button-glyph">↶</span>
+            <span class="button-label">清除改动</span>
+          </button>
+          <button id="saveButton" class="accent-button" title="保存所有已修改图片的同名 txt">
+            <span class="button-glyph">↓</span>
+            <span>保存改动</span>
+            <b id="changeCount">0</b>
+          </button>
+          <span id="serverState" class="signal" data-state="idle"><i></i> LOCAL READY</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel side-panel">
+          <div class="panel-index">01 / WORK MODES</div>
+          <div class="mode-tabs" role="tablist" aria-label="工作模式">
+            <button class="mode-tab active" data-mode="favorites" role="tab" aria-selected="true">
+              <span>收藏</span><small>FAV</small>
+            </button>
+            <button class="mode-tab" data-mode="rules" role="tab" aria-selected="false">
+              <span>替换</span><small>RULES</small>
+            </button>
+          </div>
+
+          <section class="side-section source-section">
+            <div class="section-title"><span>DIRECTORY INPUT</span><em>01</em></div>
+            <label class="field-label" for="folderPath">本地文件夹路径</label>
+            <div class="inline-field">
+              <input id="folderPath" type="text" placeholder="D:\\dataset\\images" autocomplete="off" />
+              <button id="choosePathButton" class="outline-button path-picker-button" type="button" title="打开本机文件夹选择器">选择路径</button>
+              <button id="scanButton" class="icon-button" title="扫描本地路径" aria-label="扫描本地路径">↗</button>
+            </div>
+            <p id="inputNote" class="helper-text">输入路径后扫描会直接读取本机目录，不会复制图片。</p>
+          </section>
+
+          <section class="side-section mode-panel active" data-mode-panel="favorites">
+            <div class="section-title"><span>TAG FAVOURITES</span><em>02</em></div>
+            <div class="favorite-toolbar">
+              <label class="field-label" for="favoriteTarget">当前收藏栏</label>
+              <select id="favoriteTarget" aria-label="选择当前收藏栏"></select>
+              <button id="addFavoriteGroup" class="icon-button" title="新建收藏栏" aria-label="新建收藏栏">+</button>
+            </div>
+            <div id="favoritesList" class="favorites-list"></div>
+            <p class="helper-text">点击标签会写入当前图片；有勾选时写入全部选中图片。</p>
+          </section>
+
+          <section class="side-section mode-panel" data-mode-panel="rules">
+            <div class="section-title"><span>REPLACEMENT RULES</span><em id="ruleCount">00</em></div>
+            <div class="rule-brief"><span class="brief-mark">+</span><span>选中或全部图片</span><small>条件 → 删除 → 写入</small></div>
+            <div id="rulesList" class="rules-list"></div>
+            <button id="addRuleButton" class="outline-button full-width"><span class="button-glyph">+</span>新增替换条目</button>
+            <div class="rule-actions">
+              <button id="applyRulesSelectedButton" class="outline-button full-width"><span class="button-glyph">↻</span>执行选中</button>
+              <button id="applyRulesAllButton" class="accent-button full-width"><span class="button-glyph">↻</span>执行全部</button>
+            </div>
+            <div class="utility-row">
+              <button id="exportRulesButton" class="text-button">导出 JSON</button>
+              <button id="importRulesButton" class="text-button">导入 JSON</button>
+              <input id="rulesFileInput" type="file" accept="application/json,.json" hidden />
+            </div>
+          </section>
+
+          <div class="side-footer">
+            <span>SESSION / <b id="sessionCount">00</b></span>
+            <span>LOCAL ONLY</span>
+          </div>
+        </aside>
+
+        <section class="panel image-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-index">02 / IMAGE INDEX</div>
+              <h1>图像序列 <span id="imageCount" class="heading-count">00</span></h1>
+            </div>
+            <div class="selection-readout">
+              <span id="selectionCount">0 selected</span>
+              <button id="selectVisibleButton" class="text-button">选择当前筛选</button>
+              <button id="clearSelectionButton" class="text-button">清空选择</button>
+            </div>
+          </div>
+          <div class="filter-strip">
+            <div class="search-wrap">
+              <span class="search-glyph">/</span>
+              <input id="imageSearch" type="search" placeholder="按文件名或路径筛选" autocomplete="off" />
+            </div>
+            <div class="filter-line">
+              <input id="includeFilter" type="text" placeholder="包含 tag1, tag2" autocomplete="off" />
+              <select id="includeMode" title="包含筛选模式"><option value="all">全量</option><option value="any">任意</option></select>
+            </div>
+            <div class="filter-line">
+              <input id="excludeFilter" type="text" placeholder="排除 tag1, tag2" autocomplete="off" />
+              <select id="excludeMode" title="排除筛选模式"><option value="all">全量</option><option value="any">任意</option></select>
+            </div>
+            <button id="resetFiltersButton" class="icon-button" title="清除筛选" aria-label="清除筛选">×</button>
+          </div>
+          <div class="list-meta"><span>FILE / TAG COVERAGE</span><span id="filterReadout">00 / 00 visible</span></div>
+          <div id="imageList" class="image-list" role="listbox" aria-label="图片列表"></div>
+          <div id="emptyImages" class="empty-state">
+            <span class="empty-code">NO DATASET MOUNTED</span>
+            <strong>从左侧装载图片目录</strong>
+            <small>支持 PNG / JPG / WEBP / BMP / GIF 与同名 TXT</small>
+          </div>
+        </section>
+
+        <section class="panel preview-panel">
+          <div class="panel-heading compact">
+            <div>
+              <div class="panel-index">03 / FRAME PREVIEW</div>
+              <h2 id="previewTitle">等待图像</h2>
+            </div>
+            <span id="previewStatus" class="status-pill">STANDBY</span>
+          </div>
+          <div id="previewStage" class="preview-stage">
+            <img id="previewImage" alt="当前图片预览" />
+            <div id="previewEmpty" class="preview-empty">
+              <span>FRAME 000</span>
+              <strong>选择一张图片</strong>
+              <small>预览区会显示当前图片与标签状态</small>
+            </div>
+            <div class="stage-corner corner-tl"></div>
+            <div class="stage-corner corner-br"></div>
+            <span class="stage-symbol symbol-cross cross-a" aria-hidden="true">+</span>
+            <span class="stage-symbol symbol-cross cross-b" aria-hidden="true">+</span>
+            <span class="stage-symbol symbol-cross cross-c" aria-hidden="true">+</span>
+            <span class="stage-symbol symbol-node node-a" aria-hidden="true"></span>
+            <span class="stage-symbol symbol-node node-b" aria-hidden="true"></span>
+            <span class="stage-axis axis-y" aria-hidden="true">Y / 02</span>
+            <span class="stage-axis axis-x" aria-hidden="true">X / 07</span>
+            <span class="stage-readout" aria-hidden="true">CTRL&nbsp;&nbsp;·&nbsp;&nbsp;FRAME / 000</span>
+          </div>
+          <div class="preview-footer">
+            <div><span class="micro-label">PATH</span><span id="previewPath">--</span></div>
+            <div><span class="micro-label">TAGS</span><b id="previewTagCount">00</b></div>
+          </div>
+          <section id="naturalDescriptionBlock" class="natural-description" hidden>
+            <div class="natural-description-head"><span>NATURAL LANGUAGE</span><em>NL</em></div>
+            <p id="naturalDescription"></p>
+          </section>
+          <div id="currentTags" class="current-tags"></div>
+        </section>
+
+        <section class="panel tag-panel">
+          <div class="panel-heading compact">
+            <div>
+              <div class="panel-index">04 / TAG REGISTER</div>
+              <h2>标签词典 <span id="tagCount" class="heading-count">00</span></h2>
+            </div>
+            <button id="addTranslationButton" class="icon-button" title="新增翻译键" aria-label="新增翻译键">+</button>
+          </div>
+          <div class="tag-toolbar">
+            <div class="search-wrap compact-search"><span class="search-glyph">/</span><input id="tagSearch" type="search" placeholder="搜索标签或译文" autocomplete="off" /></div>
+            <button id="toggleCurrentTags" class="text-button active">当前图像</button>
+            <button id="toggleAllTags" class="text-button">全量词典</button>
+          </div>
+          <div class="tag-table-head"><span>TAG / TRANSLATION</span><span>COUNT</span><span>ACTION</span></div>
+          <div id="tagTable" class="tag-table"></div>
+          <div id="emptyTags" class="empty-state small-empty"><span class="empty-code">TAG REGISTER EMPTY</span><small>加载图像后会建立标签索引</small></div>
+        </section>
+
+        <aside class="panel utility-panel">
+          <div class="panel-index">05 / SYSTEM OPS</div>
+          <section class="utility-section system-section">
+            <div class="section-title"><span>SESSION OUTPUT</span><em>05</em></div>
+            <div class="system-readout"><span class="system-glyph">[]</span><div><strong>LOCAL DATA LINK</strong><small>改动只写回本地标签文件</small></div></div>
+            <button id="saveButtonInline" class="outline-button full-width"><span class="button-glyph">↓</span>保存已修改标签</button>
+          </section>
+          <section class="utility-section">
+            <div class="section-title"><span>TRANSLATION KEYS</span><em>06</em></div>
+            <div class="utility-row">
+              <button id="exportTranslationsButton" class="text-button">导出译注</button>
+              <button id="importTranslationsButton" class="text-button">导入译注</button>
+              <input id="translationsFileInput" type="file" accept="application/json,.json" hidden />
+            </div>
+            <p class="helper-text">译文在标签行内直接修改，离开输入框即保存。</p>
+          </section>
+          <section class="utility-section llm-section">
+            <div class="section-title"><span>LLM SECOND PASS</span><em>07</em></div>
+            <div id="llmConfigReadout" class="llm-readout" data-ready="false">
+              <span class="llm-signal" aria-hidden="true"></span>
+              <div><strong id="llmConfigState">API 未配置</strong><small id="llmModelReadout">VOLCANO + GEMINI</small></div>
+            </div>
+            <div class="toggle-stack">
+              <label class="toggle-row" for="styleMode" title="用于画风训练：删除画风与技法词，保留人物、服装、姿势、场景和构图等内容描述">
+                <span><strong>画风模式</strong><small>STYLE DATASET</small></span>
+                <input id="styleMode" type="checkbox" />
+                <i aria-hidden="true"></i>
+              </label>
+              <label class="toggle-row" for="allowNaturalLanguage">
+                <span><strong>允许自然语言</strong><small>MIXED PROMPT OUTPUT</small></span>
+                <input id="allowNaturalLanguage" type="checkbox" />
+                <i aria-hidden="true"></i>
+              </label>
+              <label class="toggle-row" for="autoSaveLlmResults">
+                <span><strong>自动保存 LLM 结果</strong><small>WRITE EACH COMPLETION</small></span>
+                <input id="autoSaveLlmResults" type="checkbox" checked />
+                <i aria-hidden="true"></i>
+              </label>
+            </div>
+            <div id="llmProgress" class="llm-progress" hidden>
+              <div><span id="llmProgressLabel">QUEUE</span><b id="llmProgressCount">00 / 00</b></div>
+              <progress id="llmProgressBar" max="1" value="0"></progress>
+              <div id="llmStageList" class="llm-stage-list" aria-live="polite" hidden></div>
+              <small id="llmProgressCurrent">--</small>
+            </div>
+            <div class="llm-tool-row">
+              <button id="llmConfigButton" class="outline-button" type="button"><span class="button-glyph">⚙</span>API 配置</button>
+              <button id="characterManagerButton" class="outline-button" type="button"><span class="button-glyph">◇</span>角色描述</button>
+            </div>
+            <div class="llm-run-row">
+              <button id="llmButton" class="accent-button" type="button"><span class="button-glyph">↗</span>执行选中</button>
+              <button id="llmAllButton" class="outline-button" type="button" title="处理当前目录中的全部图片"><span class="button-glyph">↗</span>执行全部</button>
+            </div>
+            <button id="clearLlmCacheButton" class="hold-button cache-clear-button" type="button" disabled title="按住直到黄色进度条走完，仅清除当前目录的 LLM 缓存标记；不会修改 TXT 或图片">
+              <span class="hold-fill" aria-hidden="true"></span>
+              <span class="button-glyph">×</span>
+              <span class="button-label">清除 LLM 缓存标记</span>
+            </button>
+          </section>
+          <div class="utility-footer"><span>BUILD 0.2.0</span><span>ANIMA TAG OPS</span></div>
+        </aside>
+      </main>
+
+      <footer class="statusbar">
+        <span><i class="status-dot"></i><b id="statusMessage">准备就绪</b></span>
+        <span>SHIFT + CLICK 选择范围</span>
+        <span>UTF-8 / COMMA DELIMITED</span>
+      </footer>
+    </div>
+
+    <dialog id="llmConfigDialog" class="work-dialog config-dialog">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div><span class="panel-index">LLM / CONFIGURATION</span><h2>模型接入与提示词</h2></div>
+          <button class="icon-button dialog-close" type="button" title="关闭" aria-label="关闭">×</button>
+        </header>
+        <div class="dialog-tabs" role="tablist" aria-label="配置页面">
+          <button class="dialog-tab active" type="button" data-config-tab="providers" role="tab" aria-selected="true">PROVIDERS / 供应商</button>
+          <button class="dialog-tab" type="button" data-config-tab="calls" role="tab" aria-selected="false">CALLS / 调用</button>
+          <button class="dialog-tab" type="button" data-config-tab="prompts" role="tab" aria-selected="false">PROMPT TEMPLATES</button>
+          <button class="dialog-tab" type="button" data-config-tab="skills" role="tab" aria-selected="false">SKILL PIPELINE</button>
+        </div>
+        <div class="dialog-body">
+          <section class="config-page active" data-config-page="providers">
+            <div class="connector-section">
+              <div class="connector-heading"><span class="connector-index">V</span><div><strong>火山方舟供应商</strong><small id="volcanoKeyStatus">KEY EMPTY</small></div></div>
+              <div class="form-grid">
+                <label class="wide-field">API URL<input id="volcanoUrl" type="url" autocomplete="off" /></label>
+                <label>PROTOCOL<select id="volcanoProtocol"><option value="chat">Chat API</option><option value="responses">Responses API</option></select></label>
+                <label class="wide-field">API KEY<div class="secret-field"><input id="volcanoKey" type="password" placeholder="保留当前密钥" autocomplete="new-password" /><button id="clearVolcanoKey" class="text-button" type="button">清除已存密钥</button></div></label>
+              </div>
+              <div class="model-catalog-actions"><button id="refreshVolcanoModels" class="outline-button" type="button">获取火山模型列表</button><output id="volcanoModelCatalogStatus" class="model-catalog-status" role="status"></output></div>
+              <div id="volcanoModelCatalog" class="model-catalog" aria-live="polite"></div>
+            </div>
+            <div class="connector-section">
+              <div class="connector-heading"><span class="connector-index gemini">G</span><div><strong>Gemini / 中转供应商</strong><small id="geminiKeyStatus">KEY EMPTY</small></div></div>
+              <div class="form-grid">
+                <label class="wide-field">API URL<input id="geminiUrl" type="url" autocomplete="off" /></label>
+                <label>PROTOCOL<select id="geminiProtocol"><option value="openai">OpenAI Compatible</option><option value="native">Gemini Native</option></select></label>
+                <label class="wide-field">API KEY<div class="secret-field"><input id="geminiKey" type="password" placeholder="保留当前密钥" autocomplete="new-password" /><button id="clearGeminiKey" class="text-button" type="button">清除已存密钥</button></div></label>
+              </div>
+              <div class="model-catalog-actions"><button id="refreshGeminiModels" class="outline-button" type="button">获取 Gemini 模型列表</button><output id="geminiModelCatalogStatus" class="model-catalog-status" role="status"></output></div>
+              <div id="geminiModelCatalog" class="model-catalog" aria-live="polite"></div>
+            </div>
+            <div class="connector-section compact-connector">
+              <div class="form-grid five-column">
+                <label>TIMEOUT / SEC<input id="timeoutSeconds" type="number" min="10" max="600" step="1" /></label>
+                <label>RETRY COUNT<input id="retryCount" type="number" min="0" max="8" step="1" /></label>
+                <label>RETRY DELAY / SEC<input id="retryDelaySeconds" type="number" min="1" max="60" step="1" /></label>
+                <label>IMAGE DETAIL<select id="imageDetail"><option value="low">LOW / 快速</option><option value="high">HIGH / 细节</option><option value="xhigh">XHIGH / 极细节</option></select></label>
+                <label>MAX PIXELS<input id="imageMaxPixels" type="number" min="196" max="36000000" step="1000" /></label>
+              </div>
+              <div class="key-storage"><span>KEY STORAGE</span><b id="keyStorageReadout">LOCAL SECURE STORE</b></div>
+            </div>
+          </section>
+
+          <section class="config-page calls-page" data-config-page="calls">
+            <div class="connector-section call-intro">
+              <div class="connector-heading"><span class="connector-index">C</span><div><strong>调用路由</strong><small>每个阶段独立选择供应商与模型</small></div></div>
+              <p class="helper-text">标签识别与 A-pose 识别必须使用支持图像输入的模型；数据清洗只发送文本，可直接使用火山方舟 Key。</p>
+            </div>
+            <div class="connector-section call-stage">
+              <div class="connector-heading"><span class="connector-index">01</span><div><strong>标签识别</strong><small>TAG RECOGNITION / IMAGE REQUIRED</small></div></div>
+              <div class="form-grid">
+                <label>供应商<select id="tagProvider"><option value="volcano">火山方舟</option><option value="gemini">Gemini 中转</option></select></label>
+                <label>模型<input id="tagModel" list="tagModelOptions" type="text" autocomplete="off" /><datalist id="tagModelOptions"></datalist></label>
+              </div>
+              <output id="tagModelCapability" class="model-capability" role="status"></output>
+            </div>
+            <div class="connector-section call-stage">
+              <div class="connector-heading"><span class="connector-index">02</span><div><strong>A-pose 识别</strong><small>APOSE RECOGNITION / IMAGE REQUIRED</small></div></div>
+              <div class="form-grid">
+                <label>供应商<select id="aposeProvider"><option value="volcano">火山方舟</option><option value="gemini">Gemini 中转</option></select></label>
+                <label>模型<input id="aposeModel" list="aposeModelOptions" type="text" autocomplete="off" /><datalist id="aposeModelOptions"></datalist></label>
+              </div>
+              <output id="aposeModelCapability" class="model-capability" role="status"></output>
+            </div>
+            <div class="connector-section call-stage">
+              <div class="connector-heading"><span class="connector-index">03</span><div><strong>数据清洗</strong><small>DATA CLEANUP / TEXT ONLY</small></div></div>
+              <div class="form-grid">
+                <label>供应商<select id="cleanProvider"><option value="volcano">火山方舟</option><option value="gemini">Gemini 中转</option></select></label>
+                <label>模型<input id="cleanModel" list="cleanModelOptions" type="text" autocomplete="off" /><datalist id="cleanModelOptions"></datalist></label>
+              </div>
+              <output id="cleanModelCapability" class="model-capability" role="status"></output>
+            </div>
+          </section>
+
+          <section class="config-page prompt-page" data-config-page="prompts">
+            <div id="promptAdaptationReadout" class="prompt-adaptation" role="status"></div>
+            <label>TAG / IMAGE TO TAGS + DESCRIPTION<textarea id="visionPrompt" rows="12"></textarea></label>
+            <label>DATA CLEANUP / FINAL ARCHIVE<textarea id="cleanPrompt" rows="14"></textarea></label>
+            <label>APOSE / CHARACTER REFERENCE<textarea id="characterPrompt" rows="9"></textarea></label>
+          </section>
+
+          <section class="config-page skill-page" data-config-page="skills">
+            <div class="connector-section">
+              <div class="connector-heading"><span class="connector-index">S</span><div><strong>运行时 Skill</strong><small>PROJECT / SKILLS</small></div></div>
+              <div id="skillPipelineList" class="skill-pipeline-list"></div>
+            </div>
+            <div class="connector-section compact-connector">
+              <div class="form-grid">
+                <label class="wide-field">CHARACTER AUDIT MODE
+                  <select id="characterAuditMode">
+                    <option value="sparse">Sparse / 核心外观</option>
+                    <option value="full">Full / 完整细节</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+        <footer class="dialog-footer">
+          <div class="test-actions">
+            <button id="testVolcanoButton" class="outline-button" type="button" title="只测试当前表单，不保存配置">测试火山连接</button>
+            <button id="testGeminiButton" class="outline-button" type="button" title="只测试当前表单，不保存配置">测试 Gemini 连接</button>
+          </div>
+          <output id="llmTestStatus" class="llm-test-status" role="status" aria-live="polite" aria-atomic="true"></output>
+          <div>
+            <button class="outline-button dialog-cancel" type="button">取消</button>
+            <button id="saveLlmConfigButton" class="accent-button" type="button">保存配置</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog id="characterDialog" class="work-dialog character-dialog">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div><span class="panel-index">CHARACTER / REGISTER</span><h2>角色描述管理</h2></div>
+          <button class="icon-button dialog-close" type="button" title="关闭" aria-label="关闭">×</button>
+        </header>
+        <div class="character-workspace">
+          <aside class="character-index">
+            <div class="character-index-head"><span>APOSE KEY</span><button id="newCharacterButton" class="icon-button" type="button" title="新增角色" aria-label="新增角色">+</button></div>
+            <div id="characterList" class="character-list"></div>
+            <div id="emptyCharacters" class="character-empty">NO CHARACTER DATA</div>
+          </aside>
+          <section class="character-editor">
+            <div class="apose-preview">
+              <img id="characterPreview" alt="角色 A-pose 预览" hidden />
+              <div id="characterPreviewEmpty"><span>A-POSE</span><b>NO FRAME</b></div>
+            </div>
+            <div class="character-fields">
+              <label>CHARACTER TAG<input id="characterTag" type="text" placeholder="character_name_(copyright)" autocomplete="off" /></label>
+              <label>A-POSE PATH<div class="path-field"><input id="characterAposePath" type="text" readonly /><button id="chooseAposeButton" class="outline-button" type="button">选择图片</button></div></label>
+              <div class="apose-key-line"><span>KEY / FILENAME</span><b id="characterKeyReadout">--</b></div>
+              <label>APPEARANCE TAGS<textarea id="characterDescription" rows="7" placeholder="hair color, eye color, default outfit..."></textarea></label>
+            </div>
+            <div class="character-actions">
+              <button id="deleteCharacterButton" class="text-button danger-text" type="button">删除条目</button>
+              <div>
+                <button id="generateCharacterButton" class="outline-button" type="button">Gemini 生成</button>
+                <button id="saveCharacterButton" class="accent-button" type="button">保存角色</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="llmResultDialog" class="work-dialog result-dialog">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div><span class="panel-index">LLM / REPORT</span><h2 id="llmResultTitle">清洗完成</h2></div>
+          <button class="icon-button dialog-close" type="button" title="关闭" aria-label="关闭">×</button>
+        </header>
+        <div class="result-body">
+          <div id="llmResultSummary" class="result-summary"></div>
+          <div id="llmResultMessages" class="result-messages"></div>
+        </div>
+        <footer class="dialog-footer"><span></span><button class="accent-button dialog-close" type="button">确认</button></footer>
+      </div>
+    </dialog>
+
+    <template id="imageRowTemplate">
+      <button class="image-row" role="option">
+        <span class="image-check" aria-hidden="true"></span>
+        <span class="image-index">00</span>
+        <span class="image-row-main"><strong class="image-name"></strong><small class="image-path"></small></span>
+        <span class="image-row-tags">00</span>
+        <span class="llm-mark" title="LLM 缓存状态">L</span>
+        <span class="modified-mark" title="有未保存修改">●</span>
+      </button>
+    </template>
+
+    <template id="tagRowTemplate">
+      <div class="tag-row">
+        <button class="tag-main" title="添加到当前图片"><span class="tag-state"></span><span class="tag-name"></span><small class="tag-translation"></small></button>
+        <span class="tag-frequency">00</span>
+        <div class="tag-actions"><button class="favorite-tag-button" title="加入当前收藏栏" aria-label="加入当前收藏栏">☆</button><button class="remove-tag-button" title="从当前图片移除" aria-label="从当前图片移除">−</button></div>
+      </div>
+    </template>
+
+    <template id="ruleTemplate">
+      <article class="rule-item">
+        <div class="rule-item-head"><span class="rule-index">R01</span><button class="remove-rule" title="删除规则" aria-label="删除规则">×</button></div>
+        <label>删除<input class="rule-delete" type="text" placeholder="tag_a, tag_b" /></label>
+        <div class="rule-mode-line"><span>删除模式</span><select class="rule-delete-mode"><option value="all">全量</option><option value="any" selected>任意</option></select></div>
+        <label>写入<input class="rule-write" type="text" placeholder="tag_c, tag_d" /></label>
+        <div class="rule-mode-line"><span>写入模式</span><select class="rule-write-mode"><option value="all">全量</option><option value="any" selected>任意</option></select></div>
+        <label>条件<input class="rule-condition" type="text" placeholder="可留空" /></label>
+        <div class="rule-mode-line"><span>条件模式</span><select class="rule-condition-mode"><option value="all">全量</option><option value="any" selected>任意</option></select></div>
+      </article>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
